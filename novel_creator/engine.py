@@ -1,6 +1,6 @@
 """
 小说创作引擎 - Novel Creation Engine
-AI驱动的长篇创作助手，支持大纲、写作、角色、世界观全流程。
+AI驱动的长篇创作助手，现已接入 Claude API 写作。
 """
 
 from pathlib import Path
@@ -8,12 +8,17 @@ from typing import Optional, Dict, List, Any
 import json
 from datetime import datetime
 
+from .writer import AIWriter
+from .exporter import Exporter
+
 
 class NovelEngine:
     """AI小说创作核心引擎"""
 
     def __init__(self, config: Optional[Dict] = None):
         self.config = config or self._default_config()
+        self.writer = AIWriter()
+        self.exporter = Exporter()
         self.projects_dir = Path(__file__).parent.parent / "projects"
         self.templates_dir = Path(__file__).parent.parent / "templates"
         self.exports_dir = Path(__file__).parent.parent / "exports"
@@ -98,44 +103,72 @@ class NovelEngine:
              scene: str = None, style: str = None, tone: str = "auto",
              length: str = "medium", pov: str = "third_person",
              temperature: float = 0.8) -> Dict:
-        """
-        AI辅助写作
-
-        写作动作:
-        - chapter: 撰写完整章节
-        - scene: 写一个场景
-        - continue: 从上次中断处继续
-        - rewrite: 重写选定段落
-        - expand: 扩展描写
-        - polish: 润色文字
-        """
+        """AI辅助写作 — 通过 Claude API 生成真实内容"""
         project_dir = self.projects_dir / project
 
         # 加载项目上下文
         ctx = self._load_project_context(project_dir)
 
-        # 确定写作参数
-        word_target = {
+        # 写入大纲
+        outline_path = project_dir / "outlines"
+        if outline_path.exists():
+            for f in outline_path.glob("*.json"):
+                with open(f, 'r', encoding='utf-8') as fh:
+                    ctx["outline"] = json.load(fh)
+                break
+
+        # 写入角色
+        chars_dir = project_dir / "characters"
+        ctx["characters"] = []
+        for f in chars_dir.glob("*.json"):
+            with open(f, 'r', encoding='utf-8') as fh:
+                ctx["characters"].append(json.load(fh))
+
+        word_target_map = {
             "short": 1000, "medium": 3000, "long": 5000, "ultra_long": 10000
-        }.get(length, 3000)
+        }
+        word_target = word_target_map.get(length, 3000)
 
         print(f"  ✍️ {action} | {length}(~{word_target}字) | 语气: {tone}")
         print(f"  📖 项目: {project} | 章节: {chapter or '自动'}")
+        if self.writer.ai_available:
+            print(f"  🤖 使用 Claude API 生成...")
+        else:
+            print(f"  ⚠️ 离线模式 — 设置 ANTHROPIC_API_KEY 启用 AI 写作")
 
-        content = self._generate_content(
-            action=action,
-            context=ctx,
-            chapter=chapter,
-            scene=scene,
-            style=style,
-            tone=tone,
-            word_target=word_target,
-            pov=pov,
-            temperature=temperature,
-        )
+        if action == "chapter":
+            content = self.writer.write_chapter(
+                context=ctx, chapter_num=chapter or 1,
+                tone=tone, length=length, pov=pov, temperature=temperature,
+            )
+        elif action == "scene":
+            content = self.writer.write_scene(
+                context=ctx, scene_desc=scene or "",
+                tone=tone, length=length,
+            )
+        elif action == "continue":
+            last_content = self._get_last_chapter_content(project_dir)
+            content = self.writer.continue_writing(
+                context=ctx, last_paragraph=last_content, tone=tone,
+            )
+        elif action == "rewrite":
+            passage = scene or ""
+            content = self.writer.rewrite_passage(
+                passage=passage, instructions=style or "请改进文笔",
+                tone=tone,
+            )
+        elif action == "expand":
+            content = self.writer.expand_description(
+                passage=scene or "", focus=style or "环境",
+            )
+        elif action == "polish":
+            content = self.writer.polish_text(passage=scene or "")
+        else:
+            content = self.writer.write_chapter(ctx, chapter or 1, tone, length, pov, temperature)
 
         # 保存内容
-        chapter_file = project_dir / "chapters" / f"chapter_{chapter or 'draft':02d}.md"
+        ch_num = chapter or 1
+        chapter_file = project_dir / "chapters" / f"chapter_{ch_num:02d}.md"
         with open(chapter_file, 'w', encoding='utf-8') as f:
             f.write(content)
 
@@ -144,10 +177,10 @@ class NovelEngine:
 
         return {
             "action": action,
-            "chapter": chapter,
+            "chapter": ch_num,
             "word_count": len(content),
             "file": str(chapter_file),
-            "content_preview": content[:200] + "...",
+            "content_preview": content[:300] + ("..." if len(content) > 300 else ""),
         }
 
     def character_action(self, args) -> Dict:
@@ -189,18 +222,49 @@ class NovelEngine:
 
     def export_project(self, project: str, format: str = "epub",
                       output: str = None, cover: str = None) -> str:
-        """导出作品"""
+        """导出作品 — 真实格式转换"""
         project_dir = self.projects_dir / project
         output = output or str(self.exports_dir / f"{project}.{format}")
 
         print(f"  📦 导出格式: {format}")
         print(f"  📂 扫描章节文件...")
 
-        chapters = sorted(project_dir.glob("chapters/chapter_*.md"))
-        print(f"  📖 共找到 {len(chapters)} 章")
+        chapters_dir = project_dir / "chapters"
+        chapter_files = sorted(chapters_dir.glob("chapter_*.md"))
+        print(f"  📖 共找到 {len(chapter_files)} 章")
 
-        output_path = self._export_format(chapters, format, output, cover)
-        return str(output_path)
+        # 读取所有章节
+        chapters_content = []
+        for cf in chapter_files:
+            chapters_content.append(cf.read_text(encoding="utf-8"))
+
+        if not chapters_content:
+            print(f"  ❌ 未找到章节文件，请先执行写作命令")
+            return ""
+
+        # 加载元数据
+        meta_path = project_dir / "metadata.json"
+        metadata = {}
+        if meta_path.exists():
+            with open(meta_path, 'r', encoding='utf-8') as f:
+                metadata = json.load(f)
+
+        # 导出
+        if format == "epub":
+            result = self.exporter.to_epub(chapters_content, metadata, cover, output)
+        elif format == "pdf":
+            result = self.exporter.to_pdf(chapters_content, metadata, output)
+        elif format == "docx":
+            result = self.exporter.to_docx(chapters_content, metadata, output)
+        elif format == "txt":
+            result = self.exporter.to_txt(chapters_content, metadata, output)
+        elif format == "html" or format == "md":
+            result = self.exporter.to_html(chapters_content, metadata, output)
+        else:
+            result = self.exporter.to_txt(chapters_content, metadata, output)
+
+        print(f"  ✅ 导出完成: {result}")
+        return str(result)
 
     def interactive_mode(self, project: str = None):
         """交互式写作模式"""

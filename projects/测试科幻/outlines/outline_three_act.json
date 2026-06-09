@@ -1,0 +1,93 @@
+{
+  "style": "three_act",
+  "total_chapters": 10,
+  "acts": [
+    {
+      "name": "第一幕: 开端",
+      "chapters": [
+        {
+          "number": 1,
+          "title": "第1章",
+          "summary": "",
+          "scenes": [],
+          "characters": [],
+          "viewpoint": ""
+        },
+        {
+          "number": 2,
+          "title": "第2章",
+          "summary": "",
+          "scenes": [],
+          "characters": [],
+          "viewpoint": ""
+        },
+        {
+          "number": 3,
+          "title": "第3章",
+          "summary": "",
+          "scenes": [],
+          "characters": [],
+          "viewpoint": ""
+        }
+      ]
+    },
+    {
+      "name": "第二幕: 对抗",
+      "chapters": [
+        {
+          "number": 4,
+          "title": "第4章",
+          "summary": "",
+          "scenes": [],
+          "characters": [],
+          "viewpoint": ""
+        },
+        {
+          "number": 5,
+          "title": "第5章",
+          "summary": "",
+          "scenes": [],
+          "characters": [],
+          "viewpoint": ""
+        },
+        {
+          "number": 6,
+          "title": "第6章",
+          "summary": "",
+          "scenes": [],
+          "characters": [],
+          "viewpoint": ""
+        }
+      ]
+    },
+    {
+      "name": "第三幕: 结局",
+      "chapters": [
+        {
+          "number": 7,
+          "title": "第7章",
+          "summary": "",
+          "scenes": [],
+          "characters": [],
+          "viewpoint": ""
+        },
+        {
+          "number": 8,
+          "title": "第8章",
+          "summary": "",
+          "scenes": [],
+          "characters": [],
+          "viewpoint": ""
+        },
+        {
+          "number": 9,
+          "title": "第9章",
+          "summary": "",
+          "scenes": [],
+          "characters": [],
+          "viewpoint": ""
+        }
+      ]
+    }
+  ]
+}
