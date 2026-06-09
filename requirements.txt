@@ -1,0 +1,21 @@
+# AI小说创作助手 依赖
+# Novel Creator Dependencies
+
+# AI核心
+anthropic>=0.30.0
+
+# 文本处理
+jieba>=0.42.0
+python-docx>=0.8.0
+
+# 导出
+markdown>=3.4.0
+ebooklib>=0.18
+weasyprint>=60.0
+
+# 模板
+jinja2>=3.0.0
+pyyaml>=6.0
+
+# Web UI (可选)
+# gradio>=4.0.0
